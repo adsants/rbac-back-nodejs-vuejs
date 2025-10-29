@@ -90,13 +90,3 @@ ALTER TABLE `role_menu`
 ALTER TABLE `users`
   MODIFY `id` int NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=10;
   
-ALTER TABLE `menus`
-  ADD CONSTRAINT `fk_menus_parent` FOREIGN KEY (`parent_id`) REFERENCES `menus` (`id`) ON DELETE SET NULL;
-  
-ALTER TABLE `role_menu`
-  ADD CONSTRAINT `fk_rm_menu` FOREIGN KEY (`menu_id`) REFERENCES `menus` (`id`) ON DELETE CASCADE,
-  ADD CONSTRAINT `fk_rm_role` FOREIGN KEY (`role_id`) REFERENCES `roles` (`id`) ON DELETE CASCADE;
-  
-ALTER TABLE `users`
-  ADD CONSTRAINT `fk_users_role` FOREIGN KEY (`role_id`) REFERENCES `roles` (`id`);
-COMMIT;
