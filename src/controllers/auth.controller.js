@@ -63,7 +63,7 @@ export async function register(req, res, next) {
       'INSERT INTO users (name, email, password, role_id) VALUES (:name, :email, :password, :role_id)',
       { name, email, password: passwordHash, role_id }
     );
-    const [user] = await query('SELECT id, name, email, role_id FROM users WHERE id = :id', { id: result.insertId });
+    const [user] = await query('SELECT id, name, email, photo,  FROM users WHERE id = :id', { id: result.insertId });
     const token = signToken(user);
     setAuthCookie(res, token);
     const menus = await getMenusForRole(user.role_id);
@@ -85,7 +85,7 @@ export async function login(req, res, next) {
     const token = signToken(payload);
     setAuthCookie(res, token);
     const menus = await getMenusForRole(user.role_id);
-    res.json({ user: { id: user.id, name: user.name, email: user.email, role_id: user.role_id }, menus });
+    res.json({ user: { id: user.id, name: user.name, email: user.email, photo: user.photo, role_id: user.role_id }, menus });
   } catch (e) {
     next(e);
   }
@@ -93,9 +93,11 @@ export async function login(req, res, next) {
 
 export async function me(req, res, next) {
   try {
-    const [user] = await query('SELECT id, name, email, role_id FROM users WHERE id = :id AND deleted_at IS NULL', { id: req.user.id });
+    const [user] = await query('SELECT id, name, email,photo,role_id FROM users WHERE id = :id AND deleted_at IS NULL', { id: req.user.id });
     if (!user) return res.status(404).json({ message: 'User not found' });
+  
     const menus = await getMenusForRole(user.role_id);
+
     res.json({ user, menus });
   } catch (e) {
     next(e);
@@ -105,4 +107,34 @@ export async function me(req, res, next) {
 export async function logout(_req, res, _next) {
   res.clearCookie('access_token', { httpOnly: true, sameSite: 'lax', secure: env.COOKIE_SECURE });
   res.json({ message: 'logged out' });
+}
+
+async function menusForRole(role_id) {
+  const [r] = await query('SELECT name FROM roles WHERE id=:id', { id: role_id });
+
+  let rows;
+  if (r?.name === 'admin') {
+    // admin selalu dapat semua menu
+    rows = await query(`
+      SELECT m.*, 1 can_read, 1 can_create, 1 can_update, 1 can_delete
+      FROM menus m
+      WHERE m.deleted_at IS NULL
+      ORDER BY m.parent_id IS NOT NULL, m.parent_id, m.sort, m.id
+    `);
+  } else {
+    rows = await query(`
+      SELECT m.*,
+             IFNULL(rm.can_read,0) can_read, IFNULL(rm.can_create,0) can_create,
+             IFNULL(rm.can_update,0) can_update, IFNULL(rm.can_delete,0) can_delete
+      FROM menus m
+      LEFT JOIN role_menu rm ON rm.menu_id=m.id AND rm.role_id=:role_id AND rm.deleted_at IS NULL
+      WHERE m.deleted_at IS NULL
+      ORDER BY m.parent_id IS NOT NULL, m.parent_id, m.sort, m.id
+    `, { role_id });
+  }
+
+  const byId = new Map(); rows.forEach(r => byId.set(r.id, { ...r, children: [] }));
+  const tree = []; rows.forEach(r => { const n = byId.get(r.id); (r.parent_id ? byId.get(r.parent_id)?.children : tree)?.push(n); });
+  const filterReadable = n => { n.children = n.children.map(filterReadable).filter(Boolean); return (n.can_read===1 || n.children.length) ? n : null; };
+  return tree.map(filterReadable).filter(Boolean);
 }
