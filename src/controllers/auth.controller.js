@@ -78,9 +78,9 @@ export async function login(req, res, next) {
     const { email, password } = req.body;
     if (!email || !password) return res.status(400).json({ message: 'email & password required' });
     const [user] = await query('SELECT * FROM users WHERE email = :email AND deleted_at IS NULL', { email });
-    if (!user) return res.status(401).json({ message: 'Invalid credentials' });
+    if (!user) return res.status(401).json({ message: 'Login gagal, email tidak terdaftar.' });
     const ok = await comparePassword(password, user.password);
-    if (!ok) return res.status(401).json({ message: 'Invalid credentials' });
+    if (!ok) return res.status(401).json({ message: 'Login gagal, pastikan password benar.' });
     const payload = { id: user.id, email: user.email, role_id: user.role_id };
     const token = signToken(payload);
     setAuthCookie(res, token);
